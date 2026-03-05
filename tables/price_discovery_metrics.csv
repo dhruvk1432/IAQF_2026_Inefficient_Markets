@@ -1,0 +1,3 @@
+channel,rank_used,alpha_market_1,alpha_market_2,leader_by_adjustment,gg_share_market_1,gg_share_market_2,gg_warning
+Kraken BTC/USD vs BTC/USDC,0,,,undetermined_no_cointegration,,,
+Kraken BTC/USD vs BTC/USDT,1,0.007858520214227224,0.011824909841560333,Kraken BTC/USD,2.981277925918507,-1.981277925918507,gg_non_convex_share
