@@ -7,13 +7,13 @@ import shutil
 from pathlib import Path
 
 import pytest
-
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 
 PAPER_SHA256 = {
-    "IAQF_column_Final.tex": "de22c4fb09e64dbae89abfe340471d4eca68aa31746bd5ba7e47e28529f2e574",
-    "IAQF_column_Final.pdf": "7c84ae52903ff8004c2fa8a8e772e2f082722157a70f94172d6a5d5586337258",
+    "IAQF_Inefficient_Markets_2026.tex": "8f645f8d7d97e0ef0042f4a1d10e206fb9c76be967224a9194e340b778973335",
+    "IAQF_Inefficient_Markets_2026.pdf": "b583b7051b00604af3da42559c287865335ea51b7afb2b590d60ff37f454025b",
 }
 
 EXPECTED_FIGURES = {
@@ -98,7 +98,7 @@ def test_frozen_tex_and_pdf_sha256_are_immutable() -> None:
 
 
 def test_final_tex_references_exactly_the_fourteen_owned_pngs() -> None:
-    tex = (ROOT / "IAQF_column_Final.tex").read_text(encoding="utf-8")
+    tex = (ROOT / "IAQF_Inefficient_Markets_2026.tex").read_text(encoding="utf-8")
     referenced = {
         Path(token).name
         for token in re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", tex)
@@ -120,6 +120,7 @@ def test_validators_accept_the_committed_frozen_artifacts() -> None:
 
     assert validation_module().validate_frozen_paper(paths) is None
     assert validation_module().validate_artifacts(paths) is None
+    assert validation_module().validate_repository(paths) is None
 
 
 @pytest.mark.parametrize("mutation", ["missing", "stale"])
@@ -138,11 +139,34 @@ def test_artifact_validation_rejects_an_invalid_owned_set(
 
 def test_frozen_paper_validation_rejects_tampering(tmp_path: Path) -> None:
     copy_artifact_surface(tmp_path)
-    with (tmp_path / "IAQF_column_Final.tex").open("ab") as paper:
+    with (tmp_path / "IAQF_Inefficient_Markets_2026.tex").open("ab") as paper:
         paper.write(b"\n% tampered\n")
 
     with pytest.raises(ValueError, match=r"(?i)(sha|hash|frozen|paper)"):
         validation_module().validate_frozen_paper(repo_paths(tmp_path))
+
+
+def test_artifact_validation_rejects_wrong_figure_dimensions(tmp_path: Path) -> None:
+    copy_artifact_surface(tmp_path)
+    Image.new("RGB", (1, 1)).save(
+        tmp_path / "figures_col" / "fig_var_irf.png",
+        format="PNG",
+    )
+
+    with pytest.raises(ValueError, match=r"(?i)(dimension|size|figure)"):
+        validation_module().validate_artifacts(repo_paths(tmp_path))
+
+
+def test_artifact_validation_rejects_same_size_figure_tampering(tmp_path: Path) -> None:
+    copy_artifact_surface(tmp_path)
+    path = tmp_path / "figures_col" / "fig_var_irf.png"
+    with Image.open(path) as source:
+        changed = source.convert("RGB")
+    changed.putpixel((0, 0), (0, 0, 0))
+    changed.save(path)
+
+    with pytest.raises(ValueError, match=r"(?i)(sha|hash|figure)"):
+        validation_module().validate_artifacts(repo_paths(tmp_path))
 
 
 def test_legacy_bootstrap_claim_is_explicitly_uncomputed_provenance() -> None:

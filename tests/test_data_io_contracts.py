@@ -8,7 +8,6 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-
 RAW_MARKETS = [
     "binance_btcusdt",
     "binance_btcusdc",
@@ -150,8 +149,8 @@ def test_repo_paths_are_frozen_and_root_every_output_at_the_checkout(
     assert paths.processed == root / "data_processed"
     assert paths.tables == root / "tables"
     assert paths.figures == root / "figures_col"
-    assert paths.paper_tex == root / "IAQF_column_Final.tex"
-    assert paths.paper_pdf == root / "IAQF_column_Final.pdf"
+    assert paths.paper_tex == root / "IAQF_Inefficient_Markets_2026.tex"
+    assert paths.paper_pdf == root / "IAQF_Inefficient_Markets_2026.pdf"
     with pytest.raises(FrozenInstanceError):
         paths.raw = tmp_path / "elsewhere"
 

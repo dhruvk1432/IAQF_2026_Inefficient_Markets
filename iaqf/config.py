@@ -13,11 +13,11 @@ CRISIS_END = pd.Timestamp("2023-03-13 00:00:00", tz="UTC")
 
 PAPER_SHA256 = MappingProxyType(
     {
-        "IAQF_column_Final.tex": (
-            "de22c4fb09e64dbae89abfe340471d4eca68aa31746bd5ba7e47e28529f2e574"
+        "IAQF_Inefficient_Markets_2026.tex": (
+            "8f645f8d7d97e0ef0042f4a1d10e206fb9c76be967224a9194e340b778973335"
         ),
-        "IAQF_column_Final.pdf": (
-            "7c84ae52903ff8004c2fa8a8e772e2f082722157a70f94172d6a5d5586337258"
+        "IAQF_Inefficient_Markets_2026.pdf": (
+            "b583b7051b00604af3da42559c287865335ea51b7afb2b590d60ff37f454025b"
         ),
     }
 )
@@ -41,22 +41,41 @@ EXPECTED_FIGURES = frozenset(
     }
 )
 
+EXPECTED_FIGURE_SHA256 = MappingProxyType(
+    {
+        "fig_arbitrage_after_fees.png": "14230b09124ff705ebd909af200a5a5754707fe6fecd2a26233b59d050238f5e",
+        "fig_correlation_regime_heatmap.png": "eb45bbe935ea97d156c3ee4c1e2189b5ebf3333a7b095ac15777dbf22653b524",
+        "fig_cross_exchange_basis.png": "eaf5f67d2d8864117d231a8488cb1d66b48944dfe2c10e8819d985c1ff224366",
+        "fig_dispersion_vs_adjusted_kraken.png": "63d8b215788f12529520a3e44eea44312f267d6a08b226b866568999c9c92287",
+        "fig_half_life_robustness.png": "a1ae8009444d5efb5cec70aca176c986d42749155ae1afcf1ab918172ec4e212",
+        "fig_liquidity_roll_amihud.png": "599f22e55025a0e8ba0b84cf2aa29c2bfb55f3bde9d052723962dfb6d9af0824",
+        "fig_realized_volatility.png": "6b6ff91a287accc989e8831ff6d2651b69cc28228e7a40a3deebf9ce58e243fe",
+        "fig_stablecoin_peg.png": "2c2d3655692b2549e4519f418df396901ef7178ed2a032ffd313eb67f84e00e0",
+        "fig_stablecoin_substitution_scatter.png": "5a9b09b9c24a9d9d105fbaaa75752cbeaa640449a2fa65719ebb864b2b1f3b5f",
+        "fig_svb_crisis_zoom.png": "07d5d1f87650bd68503541ba5f3f0c38574262cdc8c582e8cfbd0369193ef520",
+        "fig_tail_blowout_kde.png": "f8012a0045f93c83270d85f2594ea6d5934342a51abc8291ec44e6f98007776c",
+        "fig_two_layer_persistence.png": "7e71f21d8370d1525e0fe362d2a677b4ae8ce6dc1e1c72d9fdd604ad71ec096a",
+        "fig_var_irf.png": "3e601e51af3a8911668868f69057a5f2d1dc45b563ba8869a76af73ea474bd3b",
+        "fig_volume_share.png": "f3cedca9e16f0a4ab6401c5a423e8f6c40637373a709579d86e24bb562a76ffb",
+    }
+)
+
 EXPECTED_FIGURE_DIMENSIONS = MappingProxyType(
     {
-        "fig_arbitrage_after_fees.png": (1047, 1381),
+        "fig_arbitrage_after_fees.png": (1049, 1381),
         "fig_correlation_regime_heatmap.png": (1949, 1787),
-        "fig_cross_exchange_basis.png": (1047, 1679),
-        "fig_dispersion_vs_adjusted_kraken.png": (1047, 1384),
-        "fig_half_life_robustness.png": (1051, 889),
-        "fig_liquidity_roll_amihud.png": (1038, 1377),
-        "fig_realized_volatility.png": (1053, 934),
-        "fig_stablecoin_peg.png": (1047, 1231),
-        "fig_stablecoin_substitution_scatter.png": (1047, 1166),
-        "fig_svb_crisis_zoom.png": (1041, 1384),
-        "fig_tail_blowout_kde.png": (1054, 985),
-        "fig_two_layer_persistence.png": (1038, 917),
-        "fig_var_irf.png": (1064, 1046),
-        "fig_volume_share.png": (1053, 937),
+        "fig_cross_exchange_basis.png": (1049, 1681),
+        "fig_dispersion_vs_adjusted_kraken.png": (1050, 1384),
+        "fig_half_life_robustness.png": (1053, 889),
+        "fig_liquidity_roll_amihud.png": (1043, 1379),
+        "fig_realized_volatility.png": (1055, 934),
+        "fig_stablecoin_peg.png": (1049, 1231),
+        "fig_stablecoin_substitution_scatter.png": (1048, 1167),
+        "fig_svb_crisis_zoom.png": (1043, 1384),
+        "fig_tail_blowout_kde.png": (1056, 986),
+        "fig_two_layer_persistence.png": (1041, 919),
+        "fig_var_irf.png": (1066, 1048),
+        "fig_volume_share.png": (1055, 937),
     }
 )
 
@@ -121,6 +140,6 @@ class RepoPaths:
             processed=root / "data_processed",
             tables=root / "tables",
             figures=root / "figures_col",
-            paper_tex=root / "IAQF_column_Final.tex",
-            paper_pdf=root / "IAQF_column_Final.pdf",
+            paper_tex=root / "IAQF_Inefficient_Markets_2026.tex",
+            paper_pdf=root / "IAQF_Inefficient_Markets_2026.pdf",
         )
