@@ -282,6 +282,34 @@ def var_irf(data: AnalysisData) -> dict[str, np.ndarray | int]:
     }
 
 
+def var_irf_diagnostics(data: AnalysisData) -> pd.DataFrame:
+    """Return the two cross-market IRF paths and their confidence-band status."""
+    result = var_irf(data)
+    rows = []
+    for direction, response_index, shock_index in [
+        ("BTC/USDC -> BTC/USD", 0, 1),
+        ("BTC/USD -> BTC/USDC", 1, 0),
+    ]:
+        for horizon in result["horizons"]:
+            low = float(result["lower"][horizon, response_index, shock_index])
+            high = float(result["upper"][horizon, response_index, shock_index])
+            rows.append(
+                {
+                    "Direction": direction,
+                    "Horizon": int(horizon),
+                    "Response (bps)": float(
+                        result["values"][horizon, response_index, shock_index]
+                    ),
+                    "CI low": low,
+                    "CI high": high,
+                    "CI contains zero": low <= 0.0 <= high,
+                    "VAR lags": result["selected_lags"],
+                    "N": result["n_obs"],
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def ou_regime_statistics(data: AnalysisData) -> pd.DataFrame:
     """Compute the fixed-regime ECM half-life and ADF statistics."""
     rows = []
@@ -412,6 +440,96 @@ def distributional_moments(data: AnalysisData) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def normality_diagnostics(data: AnalysisData) -> pd.DataFrame:
+    """Compute the Jarque--Bera rows printed by the February producer."""
+    rows = []
+    for channel, column in [
+        ("USDC", "basis_usdc_kraken"),
+        ("USDT", "basis_usdt_kraken"),
+    ]:
+        for regime, start, end in _study_regimes(data.basis.index):
+            values = data.basis.loc[
+                (data.basis.index >= start) & (data.basis.index < end), column
+            ].dropna()
+            statistic, p_value = scipy_stats.jarque_bera(values.to_numpy())
+            rows.append(
+                {
+                    "Channel": channel,
+                    "Regime": regime,
+                    "JB statistic": float(statistic),
+                    "p_value": float(p_value),
+                    "N": len(values),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def structural_break_tests(data: AnalysisData) -> pd.DataFrame:
+    """Reproduce the three March 10 Chow tests reported in the manuscript."""
+
+    def mean_break(series: pd.Series) -> tuple[float, float, int, int, int]:
+        clean = series.dropna()
+        before = clean.loc[clean.index < CRISIS_START]
+        after = clean.loc[clean.index >= CRISIS_START]
+        pooled_rss = float(sm.OLS(clean.to_numpy(), np.ones((len(clean), 1))).fit().ssr)
+        before_rss = float(
+            sm.OLS(before.to_numpy(), np.ones((len(before), 1))).fit().ssr
+        )
+        after_rss = float(sm.OLS(after.to_numpy(), np.ones((len(after), 1))).fit().ssr)
+        denominator_df = len(clean) - 2
+        statistic = (pooled_rss - before_rss - after_rss) / (
+            (before_rss + after_rss) / denominator_df
+        )
+        return (
+            statistic,
+            float(scipy_stats.f.sf(statistic, 1, denominator_df)),
+            len(clean),
+            1,
+            denominator_df,
+        )
+
+    dispersion = mean_break(data.basis["dispersion_usdc_kraken"])
+    adjusted = mean_break(data.basis["basis_usdc_kraken"])
+
+    clean = data.basis["basis_usdc_kraken"].dropna()
+    response = clean.iloc[1:].to_numpy()
+    design = sm.add_constant(clean.iloc[:-1].to_numpy())
+    split = int((clean.index[1:] >= CRISIS_START).argmax())
+    pooled_rss = float(sm.OLS(response, design).fit().ssr)
+    before_rss = float(sm.OLS(response[:split], design[:split]).fit().ssr)
+    after_rss = float(sm.OLS(response[split:], design[split:]).fit().ssr)
+    denominator_df = len(response) - 4
+    ar_statistic = ((pooled_rss - before_rss - after_rss) / 2) / (
+        (before_rss + after_rss) / denominator_df
+    )
+    ar_result = (
+        ar_statistic,
+        float(scipy_stats.f.sf(ar_statistic, 2, denominator_df)),
+        len(response),
+        2,
+        denominator_df,
+    )
+
+    return pd.DataFrame(
+        [
+            {
+                "Metric": metric,
+                "F statistic": values[0],
+                "p_value": values[1],
+                "N": values[2],
+                "df numerator": values[3],
+                "df denominator": values[4],
+                "break_timestamp": CRISIS_START,
+            }
+            for metric, values in [
+                ("USDC dispersion mean", dispersion),
+                ("USDC adjusted residual mean", adjusted),
+                ("USDC adjusted residual AR(1)", ar_result),
+            ]
+        ]
+    )
+
+
 def contagion_intensity(data: AnalysisData) -> pd.DataFrame:
     """Estimate the paper's fixed-regime coupled-OU contagion rows."""
     rows = []
@@ -448,6 +566,98 @@ def contagion_intensity(data: AnalysisData) -> pd.DataFrame:
                     "p_value": float(model.pvalues["S_lag"]),
                     "R2": float(model.rsquared),
                     "N": int(model.nobs),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def contagion_robustness(data: AnalysisData) -> pd.DataFrame:
+    """Reproduce the crisis no-FF and five-minute contagion specifications."""
+
+    def fit(frame: pd.DataFrame, maxlags: int) -> dict[str, float | int]:
+        frame = frame.copy()
+        frame["B_lag"] = frame["B"].shift(1)
+        frame["S_lag"] = frame["S"].shift(1)
+        frame["dB"] = frame["B"] - frame["B_lag"]
+        frame = frame.dropna()
+        model = sm.OLS(
+            frame["dB"],
+            sm.add_constant(frame[["B_lag", "S_lag"]]),
+        ).fit(cov_type="HAC", cov_kwds={"maxlags": maxlags})
+        coefficient = float(model.params["S_lag"])
+        standard_error = float(model.bse["S_lag"])
+        return {
+            "lambda": coefficient,
+            "SE": standard_error,
+            "t_stat": coefficient / standard_error,
+            "p_value": float(model.pvalues["S_lag"]),
+            "R2": float(model.rsquared),
+            "N": int(model.nobs),
+        }
+
+    crisis = (data.basis.index >= CRISIS_START) & (data.basis.index < CRISIS_END)
+    no_ff = pd.DataFrame(
+        {
+            "B": data.basis.loc[crisis, "basis_usdc_kraken"],
+            "S": data.basis.loc[crisis, "usdc_peg_dev_kraken"],
+        }
+    ).dropna()
+    basis_was_filled = (
+        data.basis_ffill_flags.loc[crisis, "basis_usdc_kraken"]
+        .reindex(no_ff.index)
+        .fillna(False)
+    )
+    no_ff = no_ff.loc[~basis_was_filled]
+
+    five_minute = pd.DataFrame(
+        {
+            "B": data.basis.loc[crisis, "basis_usdc_kraken"].resample("5min").last(),
+            "S": data.basis.loc[crisis, "usdc_peg_dev_kraken"].resample("5min").last(),
+        }
+    ).dropna()
+    return pd.DataFrame(
+        [
+            {"Specification": "Crisis no-FF"} | fit(no_ff, maxlags=60),
+            {"Specification": "Crisis 5-minute"} | fit(five_minute, maxlags=12),
+        ]
+    )
+
+
+def arbitrage_fee_sensitivity(data: AnalysisData) -> pd.DataFrame:
+    """Recompute crisis fee-plus-slippage profitability at 3, 5, and 10 bps."""
+    crisis = (data.basis.index >= CRISIS_START) & (data.basis.index < CRISIS_END)
+    rows = []
+    for fee_bps in (3.0, 5.0, 10.0):
+        for channel, basis_column, range_columns, legs in [
+            (
+                "USDC/USD (Kraken, 3-leg triangular)",
+                "basis_usdc_kraken",
+                ("kraken_btcusdc", "kraken_usdcusd", "kraken_btcusd"),
+                3,
+            ),
+            (
+                "Cross BTC/USD (Coinbase-Kraken, 2-leg pre-funded)",
+                "xbasis_btcusd_coinbase_kraken",
+                ("coinbase_btcusd", "kraken_btcusd"),
+                2,
+            ),
+        ]:
+            result = arbitrage_after_costs(
+                data.basis.loc[crisis, basis_column],
+                data.ranges.loc[crisis],
+                range_columns,
+                legs,
+                fee_bps,
+            )
+            rows.append(
+                {
+                    "Channel": channel,
+                    "fee_bps": fee_bps,
+                    "fee_component_bps": legs * fee_bps,
+                    "pct_profitable_fee_slippage": float(
+                        (result["net_fee_slippage"] > 0).mean() * 100
+                    ),
+                    "N": len(result),
                 }
             )
     return pd.DataFrame(rows)
@@ -683,6 +893,35 @@ def information_shares(data: AnalysisData) -> pd.DataFrame:
     )
 
 
+def price_discovery_diagnostics(data: AnalysisData) -> dict[str, float | int | str]:
+    """Return the VECM residual correlation cited alongside information shares."""
+    columns = ["kraken_btcusd", "kraken_btcusdt"]
+    flags = data.price_ffill_flags[columns].any(axis=1)
+    levels = np.log(data.prices[columns]).loc[~flags].dropna()
+    values = levels.to_numpy()
+    selection = select_order(values, maxlags=15, deterministic="ci")
+    selected = selection.bic
+    if selected is None:
+        selected = selection.aic if selection.aic is not None else 2
+    lag = max(1, int(selected)) - 1
+    fit = VECM(
+        values,
+        k_ar_diff=lag,
+        coint_rank=1,
+        deterministic="ci",
+    ).fit()
+    covariance = fit.sigma_u.astype(float)
+    residual_correlation = covariance[0, 1] / np.sqrt(
+        covariance[0, 0] * covariance[1, 1]
+    )
+    return {
+        "channel": "Kraken BTC/USD vs BTC/USDT",
+        "n_obs_no_ff": len(levels),
+        "k_ar_diff": lag,
+        "residual_correlation": float(residual_correlation),
+    }
+
+
 def _johansen(values: np.ndarray, lag: int) -> dict[str, float | int | bool]:
     result = coint_johansen(values, det_order=0, k_ar_diff=lag)
     trace = result.lr1.astype(float)
@@ -729,6 +968,196 @@ def half_life_from_rho(rho: float, dt_minutes: float) -> float:
     if not np.isfinite(rho) or rho <= 0.0 or rho >= 1.0:
         return float("nan")
     return float((np.log(2.0) * dt_minutes) / -np.log(rho))
+
+
+def _fit_levels_ar1(series: pd.Series) -> tuple[np.ndarray, float, float, np.ndarray]:
+    values = series.dropna().to_numpy(dtype=float)
+    design = np.column_stack((np.ones(len(values) - 1), values[:-1]))
+    intercept, rho = np.linalg.lstsq(design, values[1:], rcond=None)[0]
+    residuals = values[1:] - (intercept + rho * values[:-1])
+    residuals -= residuals.mean()
+    return values, float(intercept), float(rho), residuals
+
+
+def _simulated_ar1_slopes(
+    fit: tuple[np.ndarray, float, float, np.ndarray],
+    residual_indices: np.ndarray,
+) -> np.ndarray:
+    """Simulate AR(1) paths while retaining only OLS sufficient statistics."""
+    values, intercept, rho, residuals = fit
+    paths = residual_indices.shape[0]
+    current = np.full(paths, values[0], dtype=float)
+    sum_x = np.zeros(paths)
+    sum_y = np.zeros(paths)
+    sum_xx = np.zeros(paths)
+    sum_xy = np.zeros(paths)
+    for position in range(residual_indices.shape[1]):
+        following = intercept + rho * current + residuals[residual_indices[:, position]]
+        sum_x += current
+        sum_y += following
+        sum_xx += current * current
+        sum_xy += current * following
+        current = following
+    observations = residual_indices.shape[1]
+    return (observations * sum_xy - sum_x * sum_y) / (
+        observations * sum_xx - sum_x * sum_x
+    )
+
+
+def half_life_ratio_bootstrap(
+    data: AnalysisData,
+    *,
+    replications: int = 10_000,
+    seed: int = 42,
+    batch_size: int = 500,
+) -> dict[str, float | int | str]:
+    """Recover the parametric AR(1) residual bootstrap behind the paper values.
+
+    The February history describes this as a parametric sieve bootstrap with
+    10,000 draws. Later prose relabeled it as a 5,000-draw moving-block
+    bootstrap, but the committed moving-block script does not reproduce the
+    submitted interval.
+    """
+    if replications <= 0:
+        raise ValueError("replications must be positive")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    crisis = (data.basis.index >= CRISIS_START) & (data.basis.index < CRISIS_END)
+    basis_fit = _fit_levels_ar1(data.basis.loc[crisis, "basis_usdc_kraken"])
+    peg_fit = _fit_levels_ar1(data.basis.loc[crisis, "usdc_peg_dev_kraken"])
+    point_ratio = half_life_from_rho(peg_fit[2], 1.0) / half_life_from_rho(
+        basis_fit[2], 1.0
+    )
+
+    random = np.random.RandomState(seed)
+    ratios = []
+    for start in range(0, replications, batch_size):
+        size = min(batch_size, replications - start)
+        basis_indices = np.empty(
+            (size, len(basis_fit[0]) - 1),
+            dtype=np.uint16,
+        )
+        peg_indices = np.empty(
+            (size, len(peg_fit[0]) - 1),
+            dtype=np.uint16,
+        )
+        # Preserve the original RandomState draw order: B then S for each draw.
+        for row in range(size):
+            basis_indices[row] = random.randint(
+                0,
+                len(basis_fit[3]),
+                size=basis_indices.shape[1],
+            )
+            peg_indices[row] = random.randint(
+                0,
+                len(peg_fit[3]),
+                size=peg_indices.shape[1],
+            )
+        basis_rho = _simulated_ar1_slopes(basis_fit, basis_indices)
+        peg_rho = _simulated_ar1_slopes(peg_fit, peg_indices)
+        basis_half_life = np.where(
+            (basis_rho > 0.0) & (basis_rho < 1.0),
+            np.log(0.5) / np.log(basis_rho),
+            np.nan,
+        )
+        peg_half_life = np.where(
+            (peg_rho > 0.0) & (peg_rho < 1.0),
+            np.log(0.5) / np.log(peg_rho),
+            np.nan,
+        )
+        batch_ratios = peg_half_life / basis_half_life
+        ratios.extend(batch_ratios[np.isfinite(batch_ratios)])
+
+    finite = np.asarray(ratios)
+    low, median, high = np.percentile(finite, [2.5, 50.0, 97.5])
+    return {
+        "method": "parametric_ar1_residual_sieve",
+        "replications": replications,
+        "block_length_minutes": np.nan,
+        "seed": seed,
+        "point_ratio": point_ratio,
+        "valid_replications": len(finite),
+        "median_ratio": float(median),
+        "ci_95_low": float(low),
+        "ci_95_high": float(high),
+        "p_value_r_le_1": float(np.mean(finite <= 1.0)),
+    }
+
+
+def moving_block_half_life_ratio_bootstrap(
+    data: AnalysisData,
+    *,
+    replications: int = 5_000,
+    block_length_minutes: int = 60,
+    seed: int = 42,
+) -> dict[str, float | int | str]:
+    """Run the moving-block program that survives in the February history."""
+    if replications <= 0:
+        raise ValueError("replications must be positive")
+    if block_length_minutes <= 0:
+        raise ValueError("block_length_minutes must be positive")
+    crisis = (data.basis.index >= CRISIS_START) & (data.basis.index < CRISIS_END)
+    basis_fit = _fit_levels_ar1(data.basis.loc[crisis, "basis_usdc_kraken"])
+    peg_fit = _fit_levels_ar1(data.basis.loc[crisis, "usdc_peg_dev_kraken"])
+    basis, peg = basis_fit[0], peg_fit[0]
+    point_ratio = half_life_from_rho(peg_fit[2], 1.0) / half_life_from_rho(
+        basis_fit[2], 1.0
+    )
+    random = np.random.RandomState(seed)
+
+    def bootstrap_rhos(values: np.ndarray) -> np.ndarray:
+        observations = len(values)
+        blocks = int(np.ceil(observations / block_length_minutes))
+        rhos = np.full(replications, np.nan)
+        for draw in range(replications):
+            starts = random.randint(
+                0,
+                observations - block_length_minutes + 1,
+                size=blocks,
+            )
+            sample = np.concatenate(
+                [values[start : start + block_length_minutes] for start in starts]
+            )[:observations]
+            lagged = sample[:-1]
+            changes = np.diff(sample)
+            design = np.column_stack((np.ones(len(lagged)), lagged))
+            beta = np.linalg.lstsq(design, changes, rcond=None)[0][1]
+            rhos[draw] = 1.0 + beta
+        return rhos
+
+    basis_rho = bootstrap_rhos(basis)
+    peg_rho = bootstrap_rhos(peg)
+    basis_half_life = np.where(
+        (basis_rho > 0.0) & (basis_rho < 1.0),
+        np.log(0.5) / np.log(basis_rho),
+        np.nan,
+    )
+    peg_half_life = np.where(
+        (peg_rho > 0.0) & (peg_rho < 1.0),
+        np.log(0.5) / np.log(peg_rho),
+        np.inf,
+    )
+    valid_basis = np.isfinite(basis_half_life) & (basis_half_life > 0.0)
+    ratios = np.where(
+        valid_basis & np.isfinite(peg_half_life),
+        peg_half_life / basis_half_life,
+        np.where(valid_basis, np.inf, np.nan),
+    )
+    finite = ratios[np.isfinite(ratios)]
+    all_valid = ratios[~np.isnan(ratios)]
+    low, median, high = np.percentile(finite, [2.5, 50.0, 97.5])
+    return {
+        "method": "moving_block",
+        "replications": replications,
+        "block_length_minutes": block_length_minutes,
+        "seed": seed,
+        "point_ratio": point_ratio,
+        "valid_replications": len(finite),
+        "median_ratio": float(median),
+        "ci_95_low": float(low),
+        "ci_95_high": float(high),
+        "p_value_r_le_1": float(np.mean(all_valid <= 1.0)),
+    }
 
 
 def estimate_half_life_from_ecm(

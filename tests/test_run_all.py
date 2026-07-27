@@ -43,6 +43,7 @@ def _record_calls(monkeypatch: pytest.MonkeyPatch, runner):
     replace("build_master", analysis)
     replace("write_processed")
     replace("write_tables")
+    replace("write_figures")
     replace("validate_repository")
     return calls
 
@@ -59,6 +60,7 @@ def test_main_is_offline_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
         "build_master",
         "write_processed",
         "write_tables",
+        "write_figures",
         "validate_repository",
     ]
 
@@ -78,6 +80,7 @@ def test_refresh_flag_is_the_only_path_to_network_refresh(
         "build_master",
         "write_processed",
         "write_tables",
+        "write_figures",
         "validate_repository",
     ]
 

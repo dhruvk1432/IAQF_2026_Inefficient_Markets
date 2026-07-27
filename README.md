@@ -89,7 +89,7 @@ The implication is direct: cross-market crypto arbitrage corrected quickly, but 
 
 Following the collapse of Silicon Valley Bank in March 2023, USDC traded as low as roughly **$0.87**, creating visible violations of the [law of one price](https://en.wikipedia.org/wiki/Law_of_one_price) across crypto markets. Using 1-minute data from Binance, Coinbase, and Kraken, this paper decomposes Bitcoin price fragmentation into a dominant stablecoin-driven component and a smaller USD-adjusted arbitrage residual.
 
-The headline result is a sharp separation between the two layers. The adjusted BTC basis mean-reverts in about **0.6 minutes** during the crisis, while the USDC peg deviation persists for about **572 minutes**. The submitted paper reports a bootstrap confirmation of that gap; its surviving-code provenance is documented explicitly in the reproduction notes below.
+The headline result is a sharp separation between the two layers. The adjusted BTC basis mean-reverts in about **0.6 minutes** during the crisis, while the USDC peg deviation persists for about **572 minutes**. The submitted bootstrap numbers are now reproduced exactly, and the historical method-label discrepancy is documented explicitly below.
 
 The paper then shows that the reserve shock was not fully quarantined. Peg stress transmits into the adjusted basis through liquidity withdrawal, volatility, cross-exchange basis widening, and sharply reduced post-friction arbitrage. Fiat-quoted BTC/USD remains the main information anchor during the event, while USDC-specific markets show severe tail risk and instability. These empirical channels map directly onto stablecoin policy issues around reserve composition, redemption speed, transparency, and bankruptcy priority.
 
@@ -134,7 +134,7 @@ X_t = c + rho X_{t-1} + epsilon_t
 half-life = log(2) * Delta t / -log(rho)
 ```
 
-Because peg deviations are close to unit-root behavior, the submitted paper reports a bootstrap interval rather than relying only on parametric uncertainty. The exact submitted interval is retained as a frozen legacy result; see the reproduction note below.
+Because peg deviations are close to unit-root behavior, the submitted paper reports a bootstrap interval rather than relying only on parametric uncertainty. Git history shows that the submitted numbers came from a 10,000-draw parametric AR(1) residual sieve bootstrap; a later edit relabeled the unchanged numbers as a 5,000-draw moving-block result. The pipeline executes both methods and records the difference.
 
 The contagion model then tests whether peg stress predicts changes in the adjusted arbitrage basis:
 
@@ -148,7 +148,7 @@ Here, `S_t` is the stablecoin peg deviation. A significant `lambda` means stable
 
 **Dispersion decomposition.** During the crisis, Kraken USDC unadjusted dispersion averages roughly **+320 bps**, but the adjusted USDC residual averages only about **+5.3 bps**. USDT moves in the opposite direction, with a safe-haven premium visible in the unadjusted measure and a much smaller adjusted residual. This is the main evidence that the large headline price gaps were primarily stablecoin numeraire effects.
 
-**Two-layer persistence.** The adjusted USDC residual mean-reverts in about **0.6 minutes**, while the USDC peg deviation has a half-life near **572 minutes**. The estimated ratio is roughly **940x**. The submitted paper also reports a bootstrap rejection of equal persistence, subject to the frozen-provenance exception described below. This is the paper's central result.
+**Two-layer persistence.** The adjusted USDC residual mean-reverts in about **0.6 minutes**, while the USDC peg deviation has a half-life near **572 minutes**. The estimated ratio is roughly **940x**. The recovered sieve bootstrap reproduces **567 [216, 1,898]** and rejects equal persistence. This is the paper's central result.
 
 **Contagion intensity.** Before SVB, the USDC peg-stress transmission parameter is statistically indistinguishable from zero. During the crisis, it becomes highly significant. The sign implies that a deeper USDC discount predicts upward pressure in the adjusted residual, consistent with liquidity withdrawal from USDC order books. USDT shows the mirror pattern, consistent with safe-haven demand.
 
@@ -213,7 +213,7 @@ These are the exact figures referenced by the final paper.
 ├── run_all.py                     # single reproduction entry point
 ├── data_raw/                      # 11 committed raw Parquet files
 ├── data_processed/                # six processed Parquet files
-├── tables/                        # 36 generated table artifacts
+├── tables/                        # 44 generated tables, diagnostics, and audit artifacts
 ├── figures_col/                   # 14 paper PNGs
 ├── tests/                         # unit, contract, golden, and integration tests
 ├── pyproject.toml                 # exact Python and dependency pins
@@ -243,11 +243,10 @@ python run_all.py
 ```
 
 The default run is offline: it validates the 11 committed raw files, rebuilds the
-six processed frames, writes all 36 tables, and validates the 14 locked paper
-figures. The original plotting functions remain available in `iaqf.figures`,
-but the submitted PNGs are not overwritten because their complete historical
-rendering environment does not survive. Paths are anchored to the checkout, so
-the command also works when invoked from another working directory.
+six processed frames, writes all 44 table and diagnostic artifacts, regenerates
+all 14 figures, and validates the complete artifact surface. Paths are anchored
+to the checkout, so the command also works when invoked from another working
+directory.
 
 Network retrieval is opt-in:
 
@@ -265,9 +264,9 @@ uv run ruff check .
 uv run python -m pytest -q
 ```
 
-The full suite includes exact table and committed-PNG contracts plus an isolated
-two-run idempotence test. Plot-generation tests verify the 14-file surface and
-valid PNG output without claiming platform-sensitive byte identity.
+The full suite includes exact table and reference-render PNG contracts plus an
+isolated two-run idempotence test. CI runs portable checks on Linux and the
+golden/integration reproduction checks on the pinned macOS reference platform.
 
 The submitted `IAQF_Inefficient_Markets_2026.tex` and
 `IAQF_Inefficient_Markets_2026.pdf` are immutable.
@@ -281,13 +280,26 @@ from repository history. It reproduces `N=26,489` for both HAC channels and the
 reverse-Granger q-value `0.127898`; other paper-facing semantics, including the
 Kraken end boundary and existing missing-data choices, remain unchanged.
 
-One result is an explicit frozen legacy exception. The paper reports a bootstrap
-ratio of **567 [216, 1,898]**. Both available repository histories show that the
-surviving 5,000-draw, 60-minute moving-block implementation instead produces
-approximately **64 [46, 88]**, and there is no surviving producer for the
-submitted sieve-bootstrap result. The main pipeline therefore does not execute
-or fabricate that statistic; it records the submitted value as uncomputed
-provenance.
+The history audit found that the March snapshot in this repository contains
+byte-identical copies of the final February producer scripts and processed data
+from the legacy repository. It also resolves the bootstrap mystery:
+
+- The February manuscript described a **parametric AR(1) residual sieve
+  bootstrap** with 10,000 draws. Reconstructing that stated algorithm with the
+  historical seed reproduces **567 [216, 1,898]** exactly after paper rounding.
+- The final manuscript changed the label to a 5,000-draw, 60-minute
+  moving-block bootstrap without changing the reported numbers.
+- The committed moving-block implementation produces approximately
+  **64 [46, 88]**. This is a method mismatch in the submitted text, not a
+  numerical failure of the recovered sieve producer.
+
+The pipeline now runs both algorithms and writes their results to
+`tables/half_life_ratio_bootstrap.csv`. It also writes
+`tables/paper_claim_audit.csv`, which records one additional substantive
+shortfall: the paper says the reverse BTC/USDC-to-BTC/USD IRF confidence interval
+contains zero at every horizon, but the plotted model's horizon 3 interval is
+`[-0.237665, -0.010469]`. The forward impact response of about 6.13 bps and the
+rest of the mapped headline results reproduce.
 
 ## Methods Glossary
 
@@ -338,11 +350,11 @@ This project demonstrates:
 - event-study design around a real market stress event;
 - high-frequency financial data engineering;
 - careful treatment of missing data and forward-fill exposure;
-- econometric modeling with HAC inference, VECM, VAR, Granger tests, and explicit legacy-bootstrap provenance;
+- econometric modeling with HAC inference, VECM, VAR, Granger tests, and an executable two-method bootstrap audit;
 - market microstructure reasoning around liquidity, spreads, volatility, and executable arbitrage;
 - policy interpretation connecting empirical findings to stablecoin regulation;
-- fully scripted reproduction of processed data and tables, with locked final
-  figures verified byte-for-byte.
+- fully scripted reproduction of processed data, tables, diagnostics, and all
+  final figures.
 
 ## Disclaimer
 

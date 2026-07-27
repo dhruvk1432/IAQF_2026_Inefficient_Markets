@@ -18,14 +18,17 @@ from iaqf.config import (
 from iaqf.data import PROCESSED_FILES, RAW_MARKETS, load_processed, validate_raw
 
 LEGACY_BOOTSTRAP_CLAIM = {
-    "method": "moving-block bootstrap",
-    "replications": 5_000,
-    "block_length_minutes": 60,
+    "submitted_method": "moving-block bootstrap",
+    "submitted_replications": 5_000,
+    "recovered_method": "parametric AR(1) residual sieve bootstrap",
+    "recovered_replications": 10_000,
+    "seed": 42,
     "median_ratio": 567,
     "ci_95_ratio": (216, 1_898),
     "p_value": "<1e-4",
     "provenance_exception": True,
-    "computed": False,
+    "computed": True,
+    "method_matches_submitted_text": False,
 }
 
 
@@ -48,7 +51,7 @@ def validate_frozen_paper(paths: RepoPaths) -> None:
 
 
 def validate_artifacts(paths: RepoPaths) -> None:
-    """Require the exact owned sets of fourteen figures and thirty-six tables."""
+    """Require the exact owned sets of figures and tables."""
     figures = _owned_files(paths.figures, "figure")
     tables = _owned_files(paths.tables, "table")
     errors = []

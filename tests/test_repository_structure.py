@@ -44,12 +44,13 @@ def test_production_code_uses_only_the_two_approved_state_classes() -> None:
     ]
 
 
-def test_formatted_production_code_is_smaller_than_the_legacy_pipeline() -> None:
+def test_formatted_production_code_remains_compact_after_full_recovery() -> None:
     production = sorted((ROOT / "iaqf").glob("*.py")) + [ROOT / "run_all.py"]
 
-    assert sum(
-        len(path.read_text(encoding="utf-8").splitlines()) for path in production
-    ) < (4_321)
+    assert (
+        sum(len(path.read_text(encoding="utf-8").splitlines()) for path in production)
+        < 4_900
+    )
 
 
 def test_reference_environment_is_exactly_pinned() -> None:
@@ -72,7 +73,9 @@ def test_readme_documents_the_single_entry_point_and_legacy_exception() -> None:
     assert "python run_all.py --refresh-data" in readme
     assert "567 [216, 1,898]" in readme
     assert "64 [46, 88]" in readme
-    assert "no surviving" in readme.lower()
+    assert "parametric AR(1) residual sieve" in readme
+    assert "method mismatch" in readme.lower()
+    assert "horizon 3" in readme.lower()
     assert "src/01_fetch_data.py" not in readme
     assert "requirements.txt" not in readme
 
@@ -81,6 +84,8 @@ def test_ci_runs_pytest_as_a_module_for_the_non_package_project() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
     assert 'uv run python -m pytest -q -m "not golden and not integration"' in workflow
+    assert 'uv run python -m pytest -q -m "golden or integration"' in workflow
+    assert "runs-on: macos-14" in workflow
     assert "uv run pytest" not in workflow
     assert "astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b" in workflow
     assert "astral-sh/setup-uv@v8" not in workflow

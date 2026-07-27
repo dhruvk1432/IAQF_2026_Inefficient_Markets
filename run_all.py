@@ -14,6 +14,7 @@ from iaqf.data import (
     validate_raw,
     write_processed,
 )
+from iaqf.figures import write_figures
 from iaqf.tables import write_tables
 from iaqf.validation import validate_frozen_paper, validate_repository
 
@@ -42,8 +43,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     data = build_master(load_raw(paths))
     write_processed(data, paths)
 
-    print("Writing tables and validating locked paper figures...")
+    print("Writing tables and figures...")
     write_tables(data, paths)
+    write_figures(data, paths)
     validate_repository(paths)
     print("Reproduction complete; the frozen paper was not modified.")
     return 0

@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 from importlib import import_module
 from pathlib import Path
 
+import pytest
 from PIL import Image
 
-from iaqf.config import EXPECTED_FIGURES, RepoPaths
+from iaqf.config import (
+    EXPECTED_FIGURE_DIMENSIONS,
+    EXPECTED_FIGURE_SHA256,
+    EXPECTED_FIGURES,
+    RepoPaths,
+)
 from iaqf.data import load_processed
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.golden
 def test_write_figures_writes_valid_pngs_only_under_explicit_paths(
     tmp_path: Path,
 ) -> None:
@@ -43,6 +51,11 @@ def test_write_figures_writes_valid_pngs_only_under_explicit_paths(
         path = paths.figures / filename
         with Image.open(path) as image:
             image.verify()
+            assert image.size == EXPECTED_FIGURE_DIMENSIONS[filename]
+        assert (
+            hashlib.sha256(path.read_bytes()).hexdigest()
+            == EXPECTED_FIGURE_SHA256[filename]
+        )
     assert not paths.tables.exists()
     assert not any(unrelated_cwd.iterdir())
     assert committed_state == {

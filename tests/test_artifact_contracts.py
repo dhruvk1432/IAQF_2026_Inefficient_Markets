@@ -9,67 +9,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from iaqf.config import EXPECTED_FIGURES, EXPECTED_TABLES
+
 ROOT = Path(__file__).resolve().parents[1]
 
 PAPER_SHA256 = {
     "IAQF_Inefficient_Markets_2026.tex": "8f645f8d7d97e0ef0042f4a1d10e206fb9c76be967224a9194e340b778973335",
     "IAQF_Inefficient_Markets_2026.pdf": "b583b7051b00604af3da42559c287865335ea51b7afb2b590d60ff37f454025b",
-}
-
-EXPECTED_FIGURES = {
-    "fig_arbitrage_after_fees.png",
-    "fig_correlation_regime_heatmap.png",
-    "fig_cross_exchange_basis.png",
-    "fig_dispersion_vs_adjusted_kraken.png",
-    "fig_half_life_robustness.png",
-    "fig_liquidity_roll_amihud.png",
-    "fig_realized_volatility.png",
-    "fig_stablecoin_peg.png",
-    "fig_stablecoin_substitution_scatter.png",
-    "fig_svb_crisis_zoom.png",
-    "fig_tail_blowout_kde.png",
-    "fig_two_layer_persistence.png",
-    "fig_var_irf.png",
-    "fig_volume_share.png",
-}
-
-EXPECTED_TABLES = {
-    "arbitrage_compact.tex",
-    "arbitrage_summary.csv",
-    "cointegration_johansen.csv",
-    "cointegration_vecm_merged.tex",
-    "contagion_intensity.csv",
-    "contagion_intensity.tex",
-    "data_coverage_core.csv",
-    "data_coverage_core.tex",
-    "depth_proxy_table.csv",
-    "depth_proxy_table.tex",
-    "dispersion_adjusted_identity_check.csv",
-    "dispersion_adjusted_stats.csv",
-    "dispersion_adjusted_stats.tex",
-    "distributional_robustness.csv",
-    "distributional_robustness.tex",
-    "ff_sensitivity_core.csv",
-    "genius_counterfactual.csv",
-    "genius_counterfactual.tex",
-    "granger_causality.csv",
-    "granger_causality_fdr.csv",
-    "hac_headline_metrics.csv",
-    "half_life_robustness.csv",
-    "half_life_sanity_grid.csv",
-    "hasbrouck_is.csv",
-    "liquidity_spread_table.tex",
-    "ou_basis_stats.csv",
-    "peg_recovery_thresholds.csv",
-    "price_discovery_metrics.csv",
-    "realized_vol_headline.csv",
-    "realized_vol_regime_means.csv",
-    "regression_hac.tex",
-    "regression_results.txt",
-    "regression_usdc.txt",
-    "regression_usdt.txt",
-    "volume_share_pair_regime.csv",
-    "volume_share_quote_regime.csv",
 }
 
 
@@ -169,14 +115,17 @@ def test_artifact_validation_rejects_same_size_figure_tampering(tmp_path: Path) 
         validation_module().validate_artifacts(repo_paths(tmp_path))
 
 
-def test_legacy_bootstrap_claim_is_explicitly_uncomputed_provenance() -> None:
+def test_legacy_bootstrap_claim_records_recovered_numbers_and_method_mismatch() -> None:
     assert validation_module().LEGACY_BOOTSTRAP_CLAIM == {
-        "method": "moving-block bootstrap",
-        "replications": 5_000,
-        "block_length_minutes": 60,
+        "submitted_method": "moving-block bootstrap",
+        "submitted_replications": 5_000,
+        "recovered_method": "parametric AR(1) residual sieve bootstrap",
+        "recovered_replications": 10_000,
+        "seed": 42,
         "median_ratio": 567,
         "ci_95_ratio": (216, 1_898),
         "p_value": "<1e-4",
         "provenance_exception": True,
-        "computed": False,
+        "computed": True,
+        "method_matches_submitted_text": False,
     }
